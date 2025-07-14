@@ -7,7 +7,10 @@ import { Messages } from './pages/Messages';
 import { Wallet } from './pages/Wallet';
 import { Search } from './pages/Search';
 import { Profile } from './pages/Profile';
+import { ComplianceModal } from './components/ComplianceModal';
+import { PWAPrompt } from './components/PWAPrompt';
 import { supabase } from './lib/supabase';
+import { secureStorage } from './lib/secureStorage';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -28,10 +31,46 @@ export function App() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [userType, setUserType] = useState<'metamask' | 'email' | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showCompliance, setShowCompliance] = useState(false);
 
   useEffect(() => {
+    // Initialize secure storage
+    secureStorage.initialize();
+    
+    // Check compliance acceptance
+    const checkCompliance = () => {
+      const compliance = localStorage.getItem('kraken_compliance');
+      if (!compliance) {
+        setShowCompliance(true);
+        return false;
+      }
+      
+      try {
+        const complianceData = JSON.parse(compliance);
+        const isValid = complianceData.termsAccepted && 
+                       complianceData.privacyAccepted && 
+                       complianceData.dataRetentionAccepted;
+        
+        if (!isValid) {
+          setShowCompliance(true);
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        setShowCompliance(true);
+        return false;
+      }
+    };
+    
     // Check for existing authentication
     const checkAuth = async () => {
+      // First check compliance
+      if (!checkCompliance()) {
+        setLoading(false);
+        return;
+      }
+      
       try {
         console.log('Checking authentication status...');
         
@@ -152,6 +191,30 @@ export function App() {
     };
   }, []);
 
+  const handleComplianceAccept = () => {
+    setShowCompliance(false);
+    // Continue with normal app flow
+  };
+
+  const handleComplianceDecline = () => {
+    // Clear any stored data and redirect away
+    localStorage.clear();
+    window.location.href = 'https://google.com';
+  };
+
+  // Show compliance modal if not accepted
+  if (showCompliance) {
+    return (
+      <div className="min-h-screen bg-zinc-950">
+        <ComplianceModal
+          isOpen={showCompliance}
+          onAccept={handleComplianceAccept}
+          onDecline={handleComplianceDecline}
+        />
+      </div>
+    );
+  }
+
   const logout = async () => {
     console.log('Logging out user');
     
@@ -188,6 +251,7 @@ export function App() {
   return (
     <AuthContext.Provider value={{ isAuthenticated, walletAddress, userType, logout }}>
       <BrowserRouter>
+        <PWAPrompt />
         <Routes>
           <Route
             path="/login"

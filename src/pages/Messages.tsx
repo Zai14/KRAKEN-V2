@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, ArrowLeft, AlertCircle, Plus, Users, Clock, CheckCircle, MessageCircle, Zap, Shield, ShieldOff, Lock, Unlock } from 'lucide-react';
+import { Send, Loader2, ArrowLeft, AlertCircle, Plus, Users, Clock, CheckCircle, MessageCircle, Zap, Shield, ShieldOff, Lock, Unlock, Timer } from 'lucide-react';
 import { shortenAddress } from '../lib/web3';
 import { useContext } from 'react';
 import { AuthContext } from '../App';
 import { messagingService, type Message } from '../lib/messagingService';
+import { MessageExpiration } from '../components/MessageExpiration';
+import { secureStorage } from '../lib/secureStorage';
 
 interface Conversation {
   id: string;
@@ -27,6 +29,7 @@ export function Messages() {
   const [connectionStatus, setConnectionStatus] = useState({ gun: false });
   const [recipientStatus, setRecipientStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [encryptionEnabled, setEncryptionEnabled] = useState(true);
+  const [messageExpiration, setMessageExpiration] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { walletAddress } = useContext(AuthContext);
 
@@ -171,6 +174,26 @@ export function Messages() {
         encrypted: encryptionEnabled
       };
       
+      // Handle message expiration
+      if (messageExpiration !== null) {
+        if (messageExpiration === -1) {
+          // Read-once message - store with special flag
+          localMessage.content = `🔥 ${localMessage.content}`;
+          await secureStorage.setExpiringMessage(
+            localMessage.id, 
+            localMessage, 
+            24 * 60 * 60 * 1000 // 24 hours max for read-once
+          );
+        } else if (messageExpiration > 0) {
+          // Timed expiration
+          await secureStorage.setExpiringMessage(
+            localMessage.id, 
+            localMessage, 
+            messageExpiration
+          );
+        }
+      }
+      
       setMessages(prev => {
         const newMessages = [...prev, localMessage].sort((a, b) => a.timestamp - b.timestamp);
         generateConversationsFromMessages(newMessages);
@@ -188,6 +211,7 @@ export function Messages() {
       ));
       
       setNewMessage('');
+      setMessageExpiration(null); // Reset expiration
       
       if (showRecipient) {
         setShowRecipient(false);
@@ -423,6 +447,10 @@ export function Messages() {
                   {encryptionEnabled ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                   <span>{encryptionEnabled ? 'Encrypted' : 'Unencrypted'}</span>
                 </button>
+                <MessageExpiration
+                  onExpirationSet={setMessageExpiration}
+                  currentExpiration={messageExpiration}
+                />
               </div>
             </div>
           ) : (
@@ -455,6 +483,10 @@ export function Messages() {
                 {encryptionEnabled ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                 <span>{encryptionEnabled ? 'Encrypted' : 'Unencrypted'}</span>
               </button>
+              <MessageExpiration
+                onExpirationSet={setMessageExpiration}
+                currentExpiration={messageExpiration}
+              />
             </div>
           )}
         </div>
@@ -488,6 +520,11 @@ export function Messages() {
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-xs opacity-60">
                       {new Date(message.timestamp).toLocaleTimeString()}
+                      {message.content.startsWith('🔥') && (
+                        <span className="ml-2 text-orange-400" title="Read-once message">
+                          <Timer className="w-3 h-3 inline" />
+                        </span>
+                      )}
                     </p>
                     <div className="flex items-center space-x-1">
                       {getStatusIcon(message.status)}
@@ -527,6 +564,10 @@ export function Messages() {
               }
               className="flex-1 bg-zinc-900 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <MessageExpiration
+              onExpirationSet={setMessageExpiration}
+              currentExpiration={messageExpiration}
+            />
             <button
               type="submit"
               disabled={!newMessage.trim() || (!recipient.trim() && !selectedConversation) || loading}
@@ -541,6 +582,11 @@ export function Messages() {
           </div>
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center space-x-4 text-xs text-zinc-400">
+              {messageExpiration !== null && (
+                <span className="text-orange-400">
+                  {messageExpiration === -1 ? 'Read-once message' : 'Expiring message'}
+                </span>
+              )}
               {!connectionStatus.gun && (
                 <span className="text-red-400">No connections available</span>
               )}
