@@ -148,22 +148,6 @@ export function PWAPrompt() {
           </div>
         </div>
       )}
-
-      {/* Online Status Indicator */}
-      <div className="fixed top-4 right-4 z-40">
-        <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs transition-all ${
-          isOffline 
-            ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-            : 'bg-green-500/20 text-green-400 border border-green-500/30'
-        }`}>
-          {isOffline ? (
-            <WifiOff className="w-3 h-3" />
-          ) : (
-            <Wifi className="w-3 h-3" />
-          )}
-          <span>{isOffline ? 'Offline' : 'Online'}</span>
-        </div>
-      </div>
     </>
   );
 }
